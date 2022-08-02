@@ -17,7 +17,7 @@ def test_cleanup_new_image(cli, runtime, tmp_path):
         pytest.skip(f'{runtime} is unavailable')
 
     # Create new image just for this test with a unique layer
-    random_string = ''.join(random.choice(ascii_lowercase) for i in range(10))
+    random_string = ''.join(random.choice(ascii_lowercase) for _ in range(10))
     special_string = f"Verify this in test - {random_string}"
     dockerfile_path = tmp_path / 'Dockerfile'
     dockerfile_path.write_text('\n'.join([

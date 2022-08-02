@@ -63,7 +63,7 @@ class IsolatedFileWrite:
         # Strip off the leading key identifying characters :1:ev-
         event_uuid = key[len(':1:ev-'):]
         # Write data in a staging area and then atomic move to pickup directory
-        filename = '{}-partial.json'.format(event_uuid)
+        filename = f'{event_uuid}-partial.json'
         if not os.path.exists(os.path.join(self.private_data_dir, 'job_events')):
             os.mkdir(os.path.join(self.private_data_dir, 'job_events'), 0o700)
         dropoff_location = os.path.join(self.private_data_dir, 'job_events', filename)
@@ -92,7 +92,7 @@ class EventContext(object):
         ctx.update(kwargs)
 
     def remove_local(self, **kwargs):
-        for key in kwargs.keys():
+        for key in kwargs:
             self._local._ctx.pop(key, None)
 
     @contextlib.contextmanager
@@ -113,7 +113,7 @@ class EventContext(object):
 
     def remove_global(self, **kwargs):
         if hasattr(self, '_global_ctx'):
-            for key in kwargs.keys():
+            for key in kwargs:
                 self._global_ctx.pop(key, None)
 
     @contextlib.contextmanager
@@ -129,7 +129,7 @@ class EventContext(object):
 
     def get(self):
         ctx = {}
-        ctx.update(self.get_global())
+        ctx |= self.get_global()
         ctx.update(self.get_local())
         return ctx
 
@@ -139,14 +139,25 @@ class EventContext(object):
         event_data = self.get()
         event = event_data.pop('event', None)
         if not event:
-            event = 'verbose'
-            for key in ('debug', 'verbose', 'deprecated', 'warning', 'system_warning', 'error'):
-                if event_data.get(key, False):
-                    event = key
-                    break
+            event = next(
+                (
+                    key
+                    for key in (
+                        'debug',
+                        'verbose',
+                        'deprecated',
+                        'warning',
+                        'system_warning',
+                        'error',
+                    )
+                    if event_data.get(key, False)
+                ),
+                'verbose',
+            )
+
         event_dict = dict(event=event)
         should_process_event_data = (include_only_failed_event_data and event in ('runner_on_failed', 'runner_on_async_failed', 'runner_on_item_failed')) \
-            or not include_only_failed_event_data
+                or not include_only_failed_event_data
         if os.getenv('JOB_ID', ''):
             event_dict['job_id'] = int(os.getenv('JOB_ID', '0'))
         if os.getenv('AD_HOC_COMMAND_ID', ''):
@@ -171,7 +182,7 @@ class EventContext(object):
             if event not in ('playbook_on_stats',) and "res" in event_data and len(str(event_data['res'])) > max_res:
                 event_data['res'] = {}
         else:
-            event_data = dict()
+            event_data = {}
         event_dict['event_data'] = event_data
         return event_dict
 
@@ -185,7 +196,7 @@ class EventContext(object):
             fileobj.write(u'\x1b[K')
             for offset in range(0, len(b64data), max_width):
                 chunk = b64data[offset:offset + max_width]
-                escaped_chunk = u'{}\x1b[{}D'.format(chunk, len(chunk))
+                escaped_chunk = f'{chunk}\x1b[{len(chunk)}D'
                 fileobj.write(escaped_chunk)
             fileobj.write(u'\x1b[K')
             if flush:
@@ -193,7 +204,7 @@ class EventContext(object):
 
     def dump_begin(self, fileobj):
         begin_dict = self.get_begin_dict()
-        self.cache.set(":1:ev-{}".format(begin_dict['uuid']), begin_dict)
+        self.cache.set(f":1:ev-{begin_dict['uuid']}", begin_dict)
         self.dump(fileobj, {'uuid': begin_dict['uuid']})
 
     def dump_end(self, fileobj):

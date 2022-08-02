@@ -23,9 +23,8 @@ except AttributeError:
 
 
 def load_file_side_effect(path, value=None, *args, **kwargs):
-    if args[0] == path:
-        if value:
-            return value
+    if args[0] == path and value:
+        return value
     raise ConfigurationError
 
 
@@ -40,7 +39,7 @@ def test_runner_config_init_defaults(mocker):
     assert rc.limit is None
     assert rc.module is None
     assert rc.module_args is None
-    assert rc.artifact_dir == os.path.join('/artifacts/%s' % rc.ident)
+    assert rc.artifact_dir == os.path.join(f'/artifacts/{rc.ident}')
     assert isinstance(rc.loader, ArtifactLoader)
 
 
@@ -556,9 +555,8 @@ def test_bwrap_process_isolation_and_directory_isolation(mocker):
     mocker.patch('shutil.rmtree', return_value=True)
 
     def new_exists(path):
-        if path == "/project":
-            return False
-        return True
+        return path != "/project"
+
     rc = RunnerConfig('/')
     rc.artifact_dir = '/tmp/artifacts'
     rc.directory_isolation_path = '/tmp/dirisolation'
@@ -603,13 +601,17 @@ def test_process_isolation_settings(mocker):
 
     rc.prepare()
     print(rc.command)
-    assert rc.command[0:8] == [
+    assert rc.command[:8] == [
         'not_bwrap',
         '--die-with-parent',
         '--unshare-pid',
-        '--dev-bind', '/', '/',
-        '--proc', '/proc',
+        '--dev-bind',
+        '/',
+        '/',
+        '--proc',
+        '/proc',
     ]
+
 
     # hide /home
     assert rc.command[8] == '--bind'
@@ -619,7 +621,7 @@ def test_process_isolation_settings(mocker):
     # hide /var
     assert rc.command[11] == '--bind'
     assert 'ansible_runner_pi' in rc.command[12]
-    assert rc.command[13] == '/var' or rc.command[13] == '/private/var'
+    assert rc.command[13] in ['/var', '/private/var']
 
     # read-only bind
     assert rc.command[14:17] == ['--ro-bind', '/venv', '/venv']
@@ -648,15 +650,16 @@ def test_profiling_plugin_settings(mocker):
         'cgexec',
         '--sticky',
         '-g',
-        'cpuacct,memory,pids:ansible-runner/{}'.format(rc.ident),
+        f'cpuacct,memory,pids:ansible-runner/{rc.ident}',
         'ansible-playbook',
         'main.yaml',
     ]
 
+
     assert expected_command_start == rc.command
     assert 'main.yaml' in rc.command
     assert rc.env['ANSIBLE_CALLBACK_WHITELIST'] == 'cgroup_perf_recap'
-    assert rc.env['CGROUP_CONTROL_GROUP'] == 'ansible-runner/{}'.format(rc.ident)
+    assert rc.env['CGROUP_CONTROL_GROUP'] == f'ansible-runner/{rc.ident}'
     assert rc.env['CGROUP_OUTPUT_DIR'] == os.path.normpath(os.path.join(rc.private_data_dir, 'profiling_data'))
     assert rc.env['CGROUP_OUTPUT_FORMAT'] == 'json'
     assert rc.env['CGROUP_CPU_POLL_INTERVAL'] == '0.25'
@@ -700,7 +703,7 @@ def test_container_volume_mounting_with_Z(mocker, tmp_path):
             if mount.endswith(':/tmp/project_path/:Z'):
                 break
     else:
-        raise Exception('Could not find expected mount, args: {}'.format(new_args))
+        raise Exception(f'Could not find expected mount, args: {new_args}')
 
 
 @pytest.mark.parametrize('container_runtime', ['docker', 'podman'])
@@ -726,12 +729,41 @@ def test_containerization_settings(tmp_path, container_runtime, mocker):
     else:
         extra_container_args = [f'--user={os.getuid()}']
 
-    expected_command_start = [container_runtime, 'run', '--rm', '--tty', '--interactive', '--workdir', '/runner/project'] + \
-        ['-v', '{}/:/runner/:Z'.format(rc.private_data_dir)] + \
-        ['-v', '/host1/:/container1/', '-v', '/host2/:/container2/'] + \
-        ['--env-file', '{}/env.list'.format(rc.artifact_dir)] + \
-        extra_container_args + \
-        ['--name', 'ansible_runner_foo'] + \
-        ['my_container', 'ansible-playbook', '-i', '/runner/inventory/hosts', 'main.yaml']
+    expected_command_start = (
+        (
+            (
+                (
+                    (
+                        [
+                            container_runtime,
+                            'run',
+                            '--rm',
+                            '--tty',
+                            '--interactive',
+                            '--workdir',
+                            '/runner/project',
+                        ]
+                        + ['-v', f'{rc.private_data_dir}/:/runner/:Z']
+                    )
+                    + [
+                        '-v',
+                        '/host1/:/container1/',
+                        '-v',
+                        '/host2/:/container2/',
+                    ]
+                )
+                + ['--env-file', f'{rc.artifact_dir}/env.list']
+            )
+            + extra_container_args
+        )
+        + ['--name', 'ansible_runner_foo']
+    ) + [
+        'my_container',
+        'ansible-playbook',
+        '-i',
+        '/runner/inventory/hosts',
+        'main.yaml',
+    ]
+
 
     assert expected_command_start == rc.command

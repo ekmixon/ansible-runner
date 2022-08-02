@@ -138,8 +138,10 @@ class RunnerConfig(BaseConfig):
         if self.sandboxed and self.directory_isolation_path is not None:
             self.directory_isolation_path = tempfile.mkdtemp(prefix='runner_di_', dir=self.directory_isolation_path)
             if os.path.exists(self.project_dir):
-                output.debug("Copying directory tree from {} to {} for working directory isolation".format(self.project_dir,
-                                                                                                           self.directory_isolation_path))
+                output.debug(
+                    f"Copying directory tree from {self.project_dir} to {self.directory_isolation_path} for working directory isolation"
+                )
+
                 copy_tree(self.project_dir, self.directory_isolation_path, preserve_symlinks=True)
 
         self.prepare_env()
@@ -169,9 +171,10 @@ class RunnerConfig(BaseConfig):
             self.inventory = '/runner/inventory/hosts'
             return
 
-        if self.inventory is None:
-            if os.path.exists(os.path.join(self.private_data_dir, "inventory")):
-                self.inventory = os.path.join(self.private_data_dir, "inventory")
+        if self.inventory is None and os.path.exists(
+            os.path.join(self.private_data_dir, "inventory")
+        ):
+            self.inventory = os.path.join(self.private_data_dir, "inventory")
 
     def prepare_env(self):
         """
@@ -198,27 +201,30 @@ class RunnerConfig(BaseConfig):
 
         if 'AD_HOC_COMMAND_ID' in self.env or not os.path.exists(self.project_dir):
             self.cwd = self.private_data_dir
+        elif self.directory_isolation_path is None:
+            self.cwd = self.project_dir
+
         else:
-            if self.directory_isolation_path is not None:
-                self.cwd = self.directory_isolation_path
-            else:
-                self.cwd = self.project_dir
-
-        if 'fact_cache' in self.settings:
-            if 'fact_cache_type' in self.settings:
-                if self.settings['fact_cache_type'] == 'jsonfile':
-                    self.fact_cache = os.path.join(self.artifact_dir, self.settings['fact_cache'])
-            else:
-                self.fact_cache = os.path.join(self.artifact_dir, self.settings['fact_cache'])
-
+            self.cwd = self.directory_isolation_path
+        if 'fact_cache' in self.settings and (
+            'fact_cache_type' in self.settings
+            and self.settings['fact_cache_type'] == 'jsonfile'
+            or 'fact_cache_type' not in self.settings
+        ):
+            self.fact_cache = os.path.join(self.artifact_dir, self.settings['fact_cache'])
         if self.resource_profiling:
             callback_whitelist = os.environ.get('ANSIBLE_CALLBACK_WHITELIST', '').strip()
             self.env['ANSIBLE_CALLBACK_WHITELIST'] = ','.join(filter(None, [callback_whitelist, 'cgroup_perf_recap']))
-            self.env['CGROUP_CONTROL_GROUP'] = '{}/{}'.format(self.resource_profiling_base_cgroup, self.ident)
-            if self.resource_profiling_results_dir:
-                cgroup_output_dir = self.resource_profiling_results_dir
-            else:
-                cgroup_output_dir = os.path.normpath(os.path.join(self.private_data_dir, 'profiling_data'))
+            self.env[
+                'CGROUP_CONTROL_GROUP'
+            ] = f'{self.resource_profiling_base_cgroup}/{self.ident}'
+
+            cgroup_output_dir = (
+                self.resource_profiling_results_dir
+                or os.path.normpath(
+                    os.path.join(self.private_data_dir, 'profiling_data')
+                )
+            )
 
             # Create results directory if it does not exist
             if not os.path.isdir(cgroup_output_dir):
@@ -272,10 +278,9 @@ class RunnerConfig(BaseConfig):
         exec_list = [base_command]
 
         try:
-            if self.cmdline_args:
-                cmdline_args = self.cmdline_args
-            else:
-                cmdline_args = self.loader.load_file('env/cmdline', string_types, encoding=None)
+            cmdline_args = self.cmdline_args or self.loader.load_file(
+                'env/cmdline', string_types, encoding=None
+            )
 
             if six.PY2 and isinstance(cmdline_args, text_type):
                 cmdline_args = cmdline_args.encode('utf-8')
@@ -289,28 +294,24 @@ class RunnerConfig(BaseConfig):
             pass
         elif isinstance(self.inventory, list):
             for i in self.inventory:
-                exec_list.append("-i")
-                exec_list.append(i)
+                exec_list.extend(("-i", i))
         else:
-            exec_list.append("-i")
-            exec_list.append(self.inventory)
-
+            exec_list.extend(("-i", self.inventory))
         if self.limit is not None:
-            exec_list.append("--limit")
-            exec_list.append(self.limit)
-
+            exec_list.extend(("--limit", self.limit))
         if self.loader.isfile('env/extravars'):
             if self.containerized:
                 extravars_path = '/runner/env/extravars'
             else:
                 extravars_path = self.loader.abspath('env/extravars')
-            exec_list.extend(['-e', '@{}'.format(extravars_path)])
+            exec_list.extend(['-e', f'@{extravars_path}'])
 
         if self.extra_vars:
-            if isinstance(self.extra_vars, dict) and self.extra_vars:
-                extra_vars_list = []
-                for k in self.extra_vars:
-                    extra_vars_list.append("\"{}\":{}".format(k, json.dumps(self.extra_vars[k])))
+            if isinstance(self.extra_vars, dict):
+                extra_vars_list = [
+                    f'\"{k}\":{json.dumps(self.extra_vars[k])}'
+                    for k in self.extra_vars
+                ]
 
                 exec_list.extend(
                     [
@@ -319,32 +320,28 @@ class RunnerConfig(BaseConfig):
                     ]
                 )
             elif self.loader.isfile(self.extra_vars):
-                exec_list.extend(['-e', '@{}'.format(self.loader.abspath(self.extra_vars))])
+                exec_list.extend(['-e', f'@{self.loader.abspath(self.extra_vars)}'])
 
         if self.verbosity:
             v = 'v' * self.verbosity
-            exec_list.append('-{}'.format(v))
+            exec_list.append(f'-{v}')
 
         if self.tags:
-            exec_list.extend(['--tags', '{}'.format(self.tags)])
+            exec_list.extend(['--tags', f'{self.tags}'])
 
         if self.skip_tags:
-            exec_list.extend(['--skip-tags', '{}'.format(self.skip_tags)])
+            exec_list.extend(['--skip-tags', f'{self.skip_tags}'])
 
         if self.forks:
-            exec_list.extend(['--forks', '{}'.format(self.forks)])
+            exec_list.extend(['--forks', f'{self.forks}'])
 
         # Other parameters
         if self.execution_mode == ExecutionMode.ANSIBLE_PLAYBOOK:
             exec_list.append(self.playbook)
         elif self.execution_mode == ExecutionMode.ANSIBLE:
-            exec_list.append("-m")
-            exec_list.append(self.module)
-
+            exec_list.extend(("-m", self.module))
             if self.module_args is not None:
-                exec_list.append("-a")
-                exec_list.append(self.module_args)
-
+                exec_list.extend(("-a", self.module_args))
             if self.host_pattern is not None:
                 exec_list.append(self.host_pattern)
 
@@ -365,7 +362,13 @@ class RunnerConfig(BaseConfig):
         '''
         Wrap existing command line with cgexec in order to profile resource usage
         '''
-        new_args = ['cgexec', '--sticky', '-g', 'cpuacct,memory,pids:{}/{}'.format(self.resource_profiling_base_cgroup, self.ident)]
+        new_args = [
+            'cgexec',
+            '--sticky',
+            '-g',
+            f'cpuacct,memory,pids:{self.resource_profiling_base_cgroup}/{self.ident}',
+        ]
+
         new_args.extend(args)
         return new_args
 
@@ -392,11 +395,7 @@ class RunnerConfig(BaseConfig):
                 os.chmod(new_path, stat.S_IRUSR | stat.S_IWUSR)
             new_args.extend(['--bind', '{0}'.format(new_path), '{0}'.format(path)])
 
-        if self.private_data_dir:
-            show_paths = [self.private_data_dir]
-        else:
-            show_paths = [cwd]
-
+        show_paths = [self.private_data_dir] if self.private_data_dir else [cwd]
         for path in sorted(set(self.process_isolation_ro_paths or [])):
             if not os.path.exists(path):
                 logger.debug('read-only path not found: {0}'.format(path))

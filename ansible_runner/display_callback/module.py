@@ -114,10 +114,7 @@ class BaseCallbackModule(CallbackBase):
 
     def set_play(self, play):
         if hasattr(play, 'hosts'):
-            if isinstance(play.hosts, list):
-                pattern = ','.join(play.hosts)
-            else:
-                pattern = play.hosts
+            pattern = ','.join(play.hosts) if isinstance(play.hosts, list) else play.hosts
         else:
             pattern = ''
         name = play.get_name().strip() or pattern
@@ -137,10 +134,8 @@ class BaseCallbackModule(CallbackBase):
             task_action=task.action,
             task_args='',
         )
-        try:
+        with contextlib.suppress(AttributeError):
             task_ctx['task_path'] = task.get_path()
-        except AttributeError:
-            pass
         if C.DISPLAY_ARGS_TO_STDOUT:
             if task.no_log:
                 task_ctx['task_args'] = "the output has been hidden due to the fact that 'no_log: true' was specified for this result"
@@ -221,18 +216,11 @@ class BaseCallbackModule(CallbackBase):
 
         self.set_play(play)
         if hasattr(play, 'hosts'):
-            if isinstance(play.hosts, list):
-                pattern = ','.join(play.hosts)
-            else:
-                pattern = play.hosts
+            pattern = ','.join(play.hosts) if isinstance(play.hosts, list) else play.hosts
         else:
             pattern = ''
         name = play.get_name().strip() or pattern
-        event_data = dict(
-            name=name,
-            pattern=pattern,
-            uuid=str(play._uuid),
-        )
+        event_data = dict(name=name, pattern=pattern, uuid=play._uuid)
         with self.capture_event_data('playbook_on_play_start', **event_data):
             super(BaseCallbackModule, self).v2_playbook_on_play_start(play)
 
@@ -352,8 +340,7 @@ class BaseCallbackModule(CallbackBase):
         return None
 
     def _get_result_timing_data(self, result):
-        host_start = self._host_start.get(result._host.get_name())
-        if host_start:
+        if host_start := self._host_start.get(result._host.get_name()):
             end_time = current_time()
             return host_start, end_time, (end_time - host_start).total_seconds()
         return None, None, None

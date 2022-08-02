@@ -159,9 +159,7 @@ def test_dump_artifacts_inventory_object(mocker):
 def test_dump_artifacts_extra_keys(mocker, key, value, value_str):
     mock_dump_artifact = mocker.patch('ansible_runner.utils.dump_artifact')
 
-    kwargs = {'private_data_dir': '/tmp'}
-    kwargs.update({key: value})
-
+    kwargs = {'private_data_dir': '/tmp', key: value}
     dump_artifacts(kwargs)
 
     mock_dump_artifact.assert_called_once_with(value_str, '/tmp/env', key)

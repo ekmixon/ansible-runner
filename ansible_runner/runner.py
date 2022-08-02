@@ -56,14 +56,16 @@ class Runner(object):
         '''
         self.last_stdout_update = time.time()
         if 'uuid' in event_data:
-            filename = '{}-partial.json'.format(event_data['uuid'])
+            filename = f"{event_data['uuid']}-partial.json"
             partial_filename = os.path.join(self.config.artifact_dir,
                                             'job_events',
                                             filename)
-            full_filename = os.path.join(self.config.artifact_dir,
-                                         'job_events',
-                                         '{}-{}.json'.format(event_data['counter'],
-                                                             event_data['uuid']))
+            full_filename = os.path.join(
+                self.config.artifact_dir,
+                'job_events',
+                f"{event_data['counter']}-{event_data['uuid']}.json",
+            )
+
             try:
                 event_data.update(dict(runner_ident=str(self.config.ident)))
                 try:
@@ -73,8 +75,8 @@ class Runner(object):
                     if self.remove_partials:
                         os.remove(partial_filename)
                 except IOError as e:
-                    msg = "Failed to open ansible stdout callback plugin partial data" \
-                          " file {} with error {}".format(partial_filename, str(e))
+                    msg = f"Failed to open ansible stdout callback plugin partial data file {partial_filename} with error {str(e)}"
+
                     debug(msg)
                     if self.config.check_job_event_data:
                         raise AnsibleRunnerException(msg)
@@ -90,19 +92,24 @@ class Runner(object):
                 for plugin in ansible_runner.plugins:
                     ansible_runner.plugins[plugin].event_handler(self.config, event_data)
                 if should_write:
-                    temporary_filename = full_filename + '.tmp'
+                    temporary_filename = f'{full_filename}.tmp'
                     with codecs.open(temporary_filename, 'w', encoding='utf-8') as write_file:
                         os.chmod(temporary_filename, stat.S_IRUSR | stat.S_IWUSR)
                         json.dump(event_data, write_file)
                     os.rename(temporary_filename, full_filename)
             except IOError as e:
-                debug("Failed writing event data: {}".format(e))
+                debug(f"Failed writing event data: {e}")
 
     def status_callback(self, status):
         self.status = status
         status_data = {'status': status, 'runner_ident': str(self.config.ident)}
         if status == 'starting':
-            status_data.update({'command': self.config.command, 'env': self.config.env, 'cwd': self.config.cwd})
+            status_data |= {
+                'command': self.config.command,
+                'env': self.config.env,
+                'cwd': self.config.cwd,
+            }
+
         for plugin in ansible_runner.plugins:
             ansible_runner.plugins[plugin].status_handler(self.config, status_data)
         if self.status_handler is not None:

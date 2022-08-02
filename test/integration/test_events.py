@@ -24,10 +24,13 @@ def test_basic_events(containerized, container_runtime_available, is_pre_ansible
                 'envvars': {"ANSIBLE_DEPRECATION_WARNINGS": "False", 'ANSIBLE_PYTHON_INTERPRETER': 'auto_silent'},
                 'playbook': playbook}
     if containerized:
-        run_args.update({'process_isolation': True,
-                         'process_isolation_executable': 'podman',
-                         'container_image': defaults.default_container_image,
-                         'container_volume_mounts': [f'{tdir}:{tdir}']})
+        run_args |= {
+            'process_isolation': True,
+            'process_isolation_executable': 'podman',
+            'container_image': defaults.default_container_image,
+            'container_volume_mounts': [f'{tdir}:{tdir}'],
+        }
+
 
     if not is_run_async:
         r = run(**run_args)
@@ -36,8 +39,12 @@ def test_basic_events(containerized, container_runtime_available, is_pre_ansible
         thread.join()  # ensure async run finishes
 
     event_types = [x['event'] for x in r.events if x['event'] != 'verbose']
-    okay_events = [x for x in filter(lambda x: 'event' in x and x['event'] == 'runner_on_ok',
-                                     r.events)]
+    okay_events = list(
+        filter(
+            lambda x: 'event' in x and x['event'] == 'runner_on_ok', r.events
+        )
+    )
+
 
     assert event_types[0] == 'playbook_on_start'
     assert "playbook_on_play_start" in event_types
@@ -72,7 +79,7 @@ def test_basic_serializeable(is_pre_ansible28):
     r = run(private_data_dir=tdir,
             inventory=inv,
             playbook=[{'hosts': 'all', 'gather_facts': False, 'tasks': [{'debug': {'msg': "test"}}]}])
-    events = [x for x in r.events]
+    events = list(r.events)
     json.dumps(events)
 
 
@@ -87,14 +94,9 @@ def test_event_omission(is_pre_ansible28):
             omit_event_data=True,
             playbook=[{'hosts': 'all', 'gather_facts': False, 'tasks': [{'debug': {'msg': "test"}}]}])
 
-    events = []
+    events = [x for x in r.events if x['event'] != 'verbose']
 
-    for x in r.events:
-        if x['event'] == 'verbose':
-            continue
-        events.append(x)
-
-    assert not any([x['event_data'] for x in events])
+    assert not any(x['event_data'] for x in events)
 
 
 def test_event_omission_except_failed(is_pre_ansible28):
@@ -108,12 +110,7 @@ def test_event_omission_except_failed(is_pre_ansible28):
             only_failed_event_data=True,
             playbook=[{'hosts': 'all', 'gather_facts': False, 'tasks': [{'fail': {'msg': "test"}}]}])
 
-    events = []
-
-    for x in r.events:
-        if x['event'] == 'verbose':
-            continue
-        events.append(x)
+    events = [x for x in r.events if x['event'] != 'verbose']
 
     all_event_datas = [x['event_data'] for x in events if x['event_data']]
 
@@ -125,8 +122,13 @@ def test_runner_on_start(rc, skipif_pre_ansible28):
     r = run(private_data_dir=tdir,
             inventory="localhost ansible_connection=local",
             playbook=[{'hosts': 'all', 'gather_facts': False, 'tasks': [{'debug': {'msg': "test"}}]}])
-    start_events = [x for x in filter(lambda x: 'event' in x and x['event'] == 'runner_on_start',
-                                      r.events)]
+    start_events = list(
+        filter(
+            lambda x: 'event' in x and x['event'] == 'runner_on_start',
+            r.events,
+        )
+    )
+
     assert len(start_events) == 1
 
 
@@ -189,7 +191,7 @@ def test_profile_data(skipif_pre_ansible28):
                       if os.path.isfile(os.path.join(expected_datadir, f))]
         # Ensure each type of metric is represented in the results
         for metric in ('cpu', 'memory', 'pids'):
-            assert len([f for f in data_files if '{}.json'.format(metric) in f]) == 1
+            assert len([f for f in data_files if f'{metric}.json' in f]) == 1
 
         # Ensure each file consists of a list of json dicts
         for file in data_files:
@@ -199,8 +201,7 @@ def test_profile_data(skipif_pre_ansible28):
                     try:
                         json.loads(line)
                     except json.JSONDecodeError as e:
-                        pytest.fail("Failed to parse {}: '{}'"
-                                    .format(os.path.join(expected_datadir, file), e))
+                        pytest.fail(f"Failed to parse {os.path.join(expected_datadir, file)}: '{e}'")
 
     except RuntimeError:
         pytest.skip(

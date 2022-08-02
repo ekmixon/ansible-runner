@@ -43,17 +43,17 @@ def printenv_example(test_data_dir):
 
 def get_env_data(res):
     for event in res.events:
-        found = bool(
-            event['event'] == 'runner_on_ok' and event.get(
-                'event_data', {}
-            ).get('task_action', None) == 'look_at_environment'
+        found = (
+            event['event'] == 'runner_on_ok'
+            and event.get('event_data', {}).get('task_action', None)
+            == 'look_at_environment'
         )
+
         if found:
             return event['event_data']['res']
-    else:
-        print('output:')
-        print(res.stdout.read())
-        raise RuntimeError('Count not find look_at_environment task from playbook')
+    print('output:')
+    print(res.stdout.read())
+    raise RuntimeError('Count not find look_at_environment task from playbook')
 
 
 def test_env_accuracy(request, printenv_example):
@@ -186,7 +186,7 @@ def test_run_ansible_command_within_container(test_data_dir, container_runtime_i
 def test_run_script_within_container(test_data_dir, container_runtime_installed):
     private_data_dir = os.path.join(test_data_dir, 'debug')
     script_path = os.path.join(test_data_dir, 'files')
-    container_volume_mounts = ["{}:{}:Z".format(script_path, script_path)]
+    container_volume_mounts = [f"{script_path}:{script_path}:Z"]
     container_kwargs = {
         'process_isolation_executable': container_runtime_installed,
         'process_isolation': True,

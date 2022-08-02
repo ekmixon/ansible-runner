@@ -22,9 +22,8 @@ except AttributeError:
 
 
 def load_file_side_effect(path, value=None, *args, **kwargs):
-    if args[0] == path:
-        if value:
-            return value
+    if args[0] == path and value:
+        return value
     raise ConfigurationError
 
 
@@ -38,7 +37,7 @@ def test_base_config_init_defaults():
     assert rc.quiet is False
     assert rc.quiet is False
     assert rc.rotate_artifacts == 0
-    assert rc.artifact_dir == os.path.join('/tmp/artifacts/%s' % rc.ident)
+    assert rc.artifact_dir == os.path.join(f'/tmp/artifacts/{rc.ident}')
     assert isinstance(rc.loader, ArtifactLoader)
 
 
@@ -276,7 +275,7 @@ def test_container_volume_mounting_with_Z(tmp_path, mocker):
             if mount.endswith('project_path/:Z'):
                 break
     else:
-        raise Exception('Could not find expected mount, args: {}'.format(new_args))
+        raise Exception(f'Could not find expected mount, args: {new_args}')
 
 
 @pytest.mark.parametrize('container_runtime', ['docker', 'podman'])
@@ -314,18 +313,27 @@ def test_containerization_settings(tmp_path, container_runtime, mocker):
         '--interactive',
         '--workdir',
         '/runner/project',
-        '-v', '{}/.ssh/:/home/runner/.ssh/'.format(str(tmp_path)),
-        '-v', '{}/.ssh/:/root/.ssh/'.format(str(tmp_path)),
+        '-v',
+        f'{str(tmp_path)}/.ssh/:/home/runner/.ssh/',
+        '-v',
+        f'{str(tmp_path)}/.ssh/:/root/.ssh/',
     ]
+
 
     if container_runtime == 'podman':
         expected_command_start.extend(['--group-add=root', '--ipc=host'])
 
-    expected_command_start.extend([
-        '-v', '{}/artifacts/:/runner/artifacts/:Z'.format(rc.private_data_dir),
-        '-v', '{}/:/runner/:Z'.format(rc.private_data_dir),
-        '--env-file', '{}/env.list'.format(rc.artifact_dir),
-    ])
+    expected_command_start.extend(
+        [
+            '-v',
+            f'{rc.private_data_dir}/artifacts/:/runner/artifacts/:Z',
+            '-v',
+            f'{rc.private_data_dir}/:/runner/:Z',
+            '--env-file',
+            f'{rc.artifact_dir}/env.list',
+        ]
+    )
+
 
     expected_command_start.extend(extra_container_args)
 

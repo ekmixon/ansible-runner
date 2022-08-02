@@ -107,17 +107,12 @@ class BaseConfig(object):
         else:
             artifact_dir = os.path.abspath(artifact_dir)
 
-        if ident is None:
-            self.ident = str(uuid4())
-        else:
-            self.ident = ident
+        self.ident = str(uuid4()) if ident is None else ident
+        self.artifact_dir = os.path.join(artifact_dir, f"{self.ident}")
 
-        self.artifact_dir = os.path.join(artifact_dir, "{}".format(self.ident))
-
-        if not project_dir:
-            self.project_dir = os.path.join(self.private_data_dir, 'project')
-        else:
-            self.project_dir = project_dir
+        self.project_dir = project_dir or os.path.join(
+            self.private_data_dir, 'project'
+        )
 
         self.rotate_artifacts = rotate_artifacts
         self.fact_cache_type = fact_cache_type

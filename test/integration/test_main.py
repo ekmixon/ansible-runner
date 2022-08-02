@@ -49,7 +49,7 @@ def temp_directory(files=None):
 
 def test_temp_directory():
 
-    context = dict()
+    context = {}
 
     def will_fail():
         with temp_directory() as temp_dir:
